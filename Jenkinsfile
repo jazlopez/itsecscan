@@ -31,11 +31,11 @@ def scanPayload = [
 ]
 
 def pipelineConfig = [
-    netsparker: [
-        userId: '',
-        token: '',
-        scanQuery: scanPayload
-    ]
+        netsparker: [
+                userId: '',
+                token: '',
+                scanQuery: scanPayload
+        ]
 ]
 
 pipeline {
@@ -52,7 +52,7 @@ pipeline {
 
         string(name: 'URI_PATH',
                 defaultValue: '/',
-                description: 'Path and query string of the scan URL .e.g. /api/v1/auth?q=v)')
+                description: 'Path and query string of the scan URL .e.g. /api/v1/auth?q=v)') // end of uri path
 
         choice(name:'SCOPE', description: 'Scope of security scan. Example' +
                 'Given scan url http://kiwis.org/foo' +
@@ -64,28 +64,31 @@ pipeline {
                         'OnlyEnteredUrl',
                         'Whole Domain'
                 ]
-        )
+        ) // end of scope
 
         string(name: 'MAX_DURATION_SCAN', description: 'Scan maximum duration. Leave it empty for no maximum limit',
-                defaultValue: '1')
+                defaultValue: '1') // end of max duration scan
 
         string(name: 'FORM LOGIN USERNAME',
                 defaultValue: '',
                 description: 'Provide authentication username (leave it empty if login is not required)'
-        )
+        ) // end of login username
 
         password(name: 'FORM LOGIN PASSWORD',
                 defaultValue: '',
                 description: 'Provide authentication password (leave it empty if not login is required)'
-        )
-    }
+        ) // end of login password
+    } // end of arguments
+
     environment {
         USER_ID = credentials("ns_userId")
         TOKEN = credentials("ns_token")
-    }
+    } // end of environment
+
     stages {
-        stage("Security Netsparker Scan") {
+        stage("Validations") {
             steps{
+                echo '*********************** SECURITY SCAN INPUT VALIDATION ***********************'
                 script {
 
                     // validations and clean up
@@ -102,9 +105,6 @@ pipeline {
                         throw Exception('MAX_DURATION_SCAN needs to be equal or greater than 0')
                     }
 
-                    // netspark credentials
-                    pipelineConfig.netsparker.userId = env.USER_ID
-                    pipelineConfig.netsparker.token = env.TOKEN
                     pipelineConfig.netsparker.scanQuery.TargetUri = params.TARGET_URI + params.URI_PATH
                     pipelineConfig.netsparker.MaxScanDuration = _maxDurationScan
 
@@ -114,11 +114,27 @@ pipeline {
                         pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].UserName = params.FORM_LOGIN_USERNAME
                         pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].Password = params.FORM_LOGIN_PASSWORD
                     }
-
-                    // print out confirmation data
-                    println(pipelineConfig)
-                    // netsparkerSecurityScan(pipelineConfig.netsparker)
                 }
+            }
+        }
+
+        stage('Environment') {
+            steps{
+                echo '*********************** SECURITY SCAN API KEYS SETUP ***********************'
+                script {
+                    // netspark credentials
+                    pipelineConfig.netsparker.userId = env.USER_ID
+                    pipelineConfig.netsparker.token = env.TOKEN
+                }
+            }
+        }
+
+        stage('Scan') {
+            steps{
+                echo '*********************** SECURITY SCAN ASSETS ***********************'
+
+                echo pipelineConfig
+                // netsparkerSecurityScan(pipelineConfig.netsparker)
             }
         }
     }
