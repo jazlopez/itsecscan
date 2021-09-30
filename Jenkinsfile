@@ -2,27 +2,25 @@
 /**
  * Improvements:
  * pipelineconfig.netsparker convert to only netsparker_args
- @Library('depl@v1') _ // Library reference, notice the underscore
- import com.thermofisher.utils.DECPUtils
 **/
+@Library('depl@v1') _ // Library reference, notice the underscore
+import com.thermofisher.utils.DECPUtils
 
 def scanPayload = [
         TargetUri: '',
-        excludedLinks: false,
-        excludeLinks: [],
         MaxScanDuration: 48,
         FormAuthenticationSettingModel: [
                 LoginFormUrl: '',
                 Personas: [
                         [IsActive: true, Password: '', UserName: '']
                 ],
-                DefaultPersonaValidation: true,
+                DefaultPersonaValidation: false,
                 DisableLogoutDetection: true,
-                IsEnabled: true,
+                IsEnabled: false,
                 OverrideTargetUrl: false,
-                PersonasValidation: true
+                PersonasValidation: false
         ],
-        CrawlAndAttack: true,
+        CrawlAndAttack: false,
         FindAndFollowNewLinks: false,
         PolicyId: '010c4f1a1f9645f80053a89b0232a610',
         Scope: null,
@@ -56,11 +54,13 @@ pipeline {
                 defaultValue: '/',
                 description: 'Path and query string of the scan URL .e.g. /api/v1/auth?q=v)') // end of uri path
 
-        text(name: 'INCLUDE_URI_PATH', defaultValue: '', description: 'List of must-include URLs in scan. One per line.' +
-                     '<br/>Notice: there is not validation of badformed URLs<br/>')
+        text(name: 'INCLUDE_URI_PATH', defaultValue: '', 
+                description: 'List of must-include URLs in scan. One per line.' +
+                     'Notice: there is not validation of badformed URLs')
 
-        text(name: 'EXCLUDE_URI_PATH', defaultValue: '', description: 'List of must-exclude URLs in scan. One per line.' +
-                     '<br/>Notice: there is not validation of badformed URLs<br/>')
+        text(name: 'EXCLUDE_URI_PATH', defaultValue: '', 
+                description: 'List of must-exclude URLs in scan. One per line.' +
+                     'Notice: there is not validation of badformed URLs')
 
         choice(name:'SCOPE', description: 'Scope of security scan. Example' +
                 'Given scan url http://kiwis.org/foo' +
@@ -74,7 +74,7 @@ pipeline {
                 ]
         ) // end of scope
 
-        string(name: 'MAX_DURATION_SCAN', description: 'Scan maximum duration. Leave it empty for no maximum limit',
+        string(name: 'MAX_DURATION_SCAN', description: 'Scan maximum duration between 1-48 hours',
                 defaultValue: '1') // end of max duration scan
 
         string(name: 'FORM_LOGIN_USERNAME',
@@ -89,12 +89,14 @@ pipeline {
 
     } // end of arguments
 
+    
     environment {
         // USER_ID = credentials("ns_userId")
         // TOKEN = credentials("ns_token")
-        USER_ID = 'b6d88c57a15441bcb67daa7004a5dd98'
-        TOKEN = 'cyWPzFmaWZIFGU/zSVmLWCd2jnRPXkKp9VVbOB4thn4='
+        USER_ID = ''
+        TOKEN = ''
     } // end of environment
+    
 
     stages {
         stage("Validations") {
@@ -103,67 +105,106 @@ pipeline {
                     echo '*********************** SECURITY SCAN INPUT VALIDATION ***********************'
 
                     // validations and clean up
-                    // params.URI_PATH = !params.URI_PATH ? "/" : params.URI_PATH.trim()
-                    // params.FORM_LOGIN_USERNAME = params.FORM_LOGIN_USERNAME.trim()
-                    params.URI_PATH = params.URI_PATH.trim()
-                    params.FORM_LOGIN_USERNAME = params.FORM_LOGIN_USERNAME.trim()
-                    params.INCLUDE_URI_PATH = params.INCLUDE_URI_PATH.trim()
-                    params.EXCLUDE_URI_PATH = params.EXCLUDE_URI_PATH.trim()
-                    params.MAX_DURATION_SCAN = params.MAX_DURATION_SCAN.trim()
+                    _target_uri = params.TARGET_URI.trim()
+                    _form_login_username = params.FORM_LOGIN_USERNAME.trim()
+                    _form_login_password = params.FORM_LOGIN_PASSWORD
+                    _uri_path = params.URI_PATH.trim()
+                    _include_uri_path = params.INCLUDE_URI_PATH.trim()
+                    _exclude_uri_path = params.EXCLUDE_URI_PATH.trim()
+                    _max_duration_scan = params.MAX_DURATION_SCAN.trim()
                     
 
-                    // if(params.INCLUDE_URI_PATH) {
-                    //     pipelineConfig.netsparker.scanQuery.ImportLinks = true
-                    //     pipelineConfig.netsparker.scanQuery.ImportedLinks = INCLUDE_URI_PATH.split('\n').collect{it}
-                    // }
+                    if(_include_uri_path) {
+                        pipelineConfig.netsparker.scanQuery.ImportLinks = true
+                        pipelineConfig.netsparker.scanQuery.ImportedLinks = _include_uri_path.split('\n').collect{it}
+                        echo '- INCLUDE URI FROM SCAN: ' + pipelineConfig.netsparker.scanQuery.ImportedLinks
+                    } else {
+                        echo '- INCLUDE URI FROM SCAN: None'
+                    }
  
-                    if(params.EXCLUDE_URI_PATH) {
-                        scanPayload.ExcludeLinks = true
-                        scanPayload.ExcludedLinks = EXCLUDE_URI_PATH.split('\n').collect{it}
+                    if(_exclude_uri_path) {
+                        pipelineConfig.netsparker.scanQuery.ExcludeLinks = true
+                        pipelineConfig.netsparker.scanQuery.ExcludedLinks = _exclude_uri_path.split('\n').collect{it}
+                        echo '- EXCLUDE URI FROM SCAN: ' + pipelineConfig.netsparker.scanQuery.ExcludedLinks
+                    } else {
+                        echo '- EXCLUDE URI FROM SCAN: None'
                     }
                 
                     // validate scan duration
-                    if(!params.MAX_DURATION_SCAN.isInteger()) {
+                    if(!_max_duration_scan.isInteger()) {
                         throw new Exception('MAX_DURATION_SCAN needs to be an integer')
                     }
 
-                    _maxDurationScan = params.MAX_DURATION_SCAN.toInteger()
+                    _intMaxDurationScan = _max_duration_scan.toInteger()
                     
-                    if(_maxDurationScan < 0) {
-                         throw new Exception('MAX_DURATION_SCAN needs to be equal or greater than 0')
+                    if(_intMaxDurationScan <= 0) {
+                        throw new Exception('MAX_DURATION_SCAN needs to be greater than 0')
                     }
+                    
+                    if(_intMaxDurationScan > 48) {
+                        throw new Exception('MAX_DURATION_SCAN cannot exceed 48 hours')
+                        
+                    }
+                    echo '- MAX DURATION: ' + _intMaxDurationScan.toString()
+                    
+                    pipelineConfig.netsparker.scanQuery.Scope = params.SCOPE
+                    
 
-                    // scanPayload.TargetUri = params.TARGET_URI + params.URI_PATH
-                    // scanPayload.MaxScanDuration = _maxDurationScan
+                    pipelineConfig.netsparker.scanQuery.TargetUri = _target_uri + _uri_path
+                    pipelineConfig.netsparker.scanQuery.MaxScanDuration = _intMaxDurationScan
 
                     // // does it require login?
-                    // if(params.FORM_LOGIN_USERNAME) {
-                    //     pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.LoginFormUrl = params.TARGET_URI
-                    //     pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].UserName = params.FORM_LOGIN_USERNAME
-                    //     pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].Password = params.FORM_LOGIN_PASSWORD
-                    // }
+                    if(_form_login_username) {
+                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.IsEnabled = true
+                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.PersonaValidation = true
+                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.DefaultPersonaValidation = true
+                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.LoginFormUrl = _target_uri
+                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].UserName = _form_login_username
+                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].Password = _form_login_password
+                        echo '- AUTHENTICATION: HTTP Basic'
+                        echo '- FORM LOGIN URL: ' + _target_uri
+                        echo '- FORM LOGIN USERNAME: ' + _form_login_username
+                        echo '- FORM LOGIN PASSWORD: ' + _form_login_password
+                    }
+                    echo 'Block validations completed'
                 }
             }
         }
 
-        // stage('Environment') {
-        //     steps{
-        //         echo '*********************** SECURITY SCAN API KEYS SETUP ***********************'
-        //         script {
-        //             // netspark credentials
-        //             pipelineConfig.netsparker.userId = env.USER_ID
-        //             pipelineConfig.netsparker.token = env.TOKEN
-        //         }
-        //     }
-        // }
+        stage('Environment') {
+            steps{
+                echo '*********************** SECURITY SCAN API KEYS SETUP ***********************'
+                script {
+                    // netspark credentials
+                    pipelineConfig.netsparker.userId = env.USER_ID
+                    pipelineConfig.netsparker.token = env.TOKEN
+                }
+            }
+        }
 
         stage('Scan') {
             steps{
                 echo '*********************** SECURITY SCAN ASSETS ***********************'
 
-                println pipelineConfig.netsparker.ImportedLinks
-                // netsparkerSecurityScan(pipelineConfig.netsparker)
+                println pipelineConfig.netsparker
+                netsparkerSecurityScan(pipelineConfig.netsparker)
             }
         }
     }
+    
+    post {
+         always {
+             echo '******* ABOUT TO QUIT.....GOOD BYE ***********************'
+         }
+         success {
+             echo '******* SECURITY SCAN SUBMITTED SUCCESSFULLY.... SCAN RESULTS WILL LAND TO YOUR EMAIL ADDRESS....***********************'
+         }
+         unstable {
+             echo '******* SECURITY SCAN IS ACTING WEIRD AND I DO NOT HAVE MORE INFORMATION ABOUT IT....SEE THE LOGS AND TRY TO FIX ME....***********************'
+         }
+         failure {
+             echo '******* SECURITY SCAN FAILED DUE TO ONE OF SEVERAL REASONS: ***********************'
+             echo 'JOB BUILD ARGUMENTS, SECURITY SCAN API IS NOT REACHABLE, SECURITY SCAN REJECT YOUR ARGUMENTS AMONG OTHERS....'
+         }
+     }
 }
