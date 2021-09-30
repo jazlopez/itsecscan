@@ -20,8 +20,8 @@ def scanPayload = [
                 OverrideTargetUrl: false,
                 PersonasValidation: false
         ],
-        CrawlAndAttack: false,
-        FindAndFollowNewLinks: false,
+        CrawlAndAttack: true,
+        FindAndFollowNewLinks: true,
         PolicyId: '010c4f1a1f9645f80053a89b0232a610',
         Scope: null,
 ]
@@ -53,7 +53,13 @@ pipeline {
         string(name: 'URI_PATH',
                 defaultValue: '/',
                 description: 'Path and query string of the scan URL .e.g. /api/v1/auth?q=v)') // end of uri path
-
+    
+        booleanParam(name: 'CRAWL_N_ATTACK', description: 'Crawl webpage and follow links for vulnerabilities. It may take longer to complete', 
+            defaultValue: true)
+            
+        booleanParam(name: 'FIND_FOLLOW_NEW_LINKS', description: 'Find new links and follow. It may take longer to complete.', 
+            defaultValue: true)
+            
         text(name: 'INCLUDE_URI_PATH', defaultValue: '', 
                 description: 'List of must-include URLs in scan. One per line.' +
                      'Notice: there is not validation of badformed URLs')
@@ -160,11 +166,11 @@ pipeline {
                         pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.DefaultPersonaValidation = true
                         pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.LoginFormUrl = _target_uri
                         pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].UserName = _form_login_username
-                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].Password = _form_login_password
+                        pipelineConfig.netsparker.scanQuery.FormAuthenticationSettingModel.Personas[0].Password = _form_login_password.toString()
                         echo '- AUTHENTICATION: HTTP Basic'
                         echo '- FORM LOGIN URL: ' + _target_uri
                         echo '- FORM LOGIN USERNAME: ' + _form_login_username
-                        echo '- FORM LOGIN PASSWORD: ' + _form_login_password
+                        echo '- FORM LOGIN PASSWORD: ' + _form_login_password.toString()
                     }
                     echo 'Block validations completed'
                 }
@@ -175,6 +181,8 @@ pipeline {
             steps{
                 echo '*********************** SECURITY SCAN API KEYS SETUP ***********************'
                 script {
+                    
+
                     // netspark credentials
                     pipelineConfig.netsparker.userId = env.USER_ID
                     pipelineConfig.netsparker.token = env.TOKEN
